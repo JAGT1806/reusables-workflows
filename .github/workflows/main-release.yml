@@ -1,0 +1,30 @@
+# JAGT1806/reusables-workflows/.github/workflows/main-release.yml
+name: Main Release
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+jobs:
+  create-main-release:
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+          token: '${{ secrets.GITHUB_TOKEN }}'
+
+      - name: Setup Maven
+        uses: JAGT1806/repo-actions/.github/actions/setup-maven@main
+
+      - name: Read Version
+        id: read-version
+        uses: JAGT1806/repo-actions/.github/actions/read-version@main
+
+      - name: Create GitHun Release
+        uses: JAGT1806/repo-actions/.github/actions/create-release-gh@main
+        with:
+          tag: ${{ steps.read-version.outputs.version }}
+          notes: Automated release from ${{ github.event.pull_request.head.ref }}
