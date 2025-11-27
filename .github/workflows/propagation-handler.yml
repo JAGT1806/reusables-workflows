@@ -1,0 +1,72 @@
+# JAGT1806/reusables-workflows/.github/workflows/propagation-handler.yml
+name: Handle Propagation
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  continue-propagarion:
+    if: |
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'merge/') &&
+      contains(github.event.pull_request.head.ref, 'to-release/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+          token: '${{ secrets.GITHUB_TOKEN }}'
+
+      - name: Setup Maven
+        uses: JAGT1806/repo-actions/.github/actions/setup-maven@main
+
+      - name: Extract Branch Info
+        id: extract-info
+        shell: bash
+        run: |
+          MERGE_BRANCH="${{ github.event.pull_request.head.ref }}"
+          TARGET_BRANCH="${{ github.event.pull_request.base.ref }}"
+
+          # Extract source branch from merge branch name
+          SOURCE_BRANCH="${MERGE_BRANCH#merge/}"
+          SOURCE_BRANCH="${SOURCE_BRANCH%%-to-*}"
+          SOURCE_BRANCH="${SOURCE_BRANCH//-/\/}"
+
+          echo "source_branch=$SOURCE_BRANCH" >> $GITHUB_OUTPUT
+          echo "target_branch=$TARGET_BRANCH" >> $GITHUB_OUTPUT
+
+      - name: Get Current Version
+        id: get-version
+        uses: JAGT1806/repo-actions/.github/actions/read-version@main
+
+      - name: Continue Propagation
+        uses: JAGT1806/repo-actions/.github/actions/propagate-release@main
+        with:
+          source_branch: ${{ steps.extract-info.outputs.target_branch }}
+          source_version: ${{ steps.get-version.outputs.version }}
+          target_releases: ${{ steps.get-next-version.outputs.next_releases }}
+
+      - name: Get Next Release Branches
+        id: get-next-version
+        shell: bash
+        run: |
+          CURRENT_BRANCH="${{ steps.extract-info.outputs.target_branch }}"
+
+          # Get all release branches
+          RELEASE_BRANCHES=$(git branch -r | grep -o 'release/[0-9.]*' | sort -V | uniq)
+
+          # Find subsequent releases
+          NEXT_RELEASES=()
+          FOUND_CURRENT=false
+
+          for BRANCH in $RELEASE_BRANCHES; do
+            if [ "$FOUND_CURRENT" = true ]; then
+              NEXT_RELEASES+=("$BRANCH")
+            fi
+            if [ "$BRANCH" = "$CURRENT_BRANCH" ]; then
+              FOUND_CURRENT=true
+            fi
+          done
+
+          echo "next_releases=$(printf '%s\n' "${NEXT_RELEASES[@]}" | jq -R . | jq -s .)" >> $GITHUB_OUTPUT

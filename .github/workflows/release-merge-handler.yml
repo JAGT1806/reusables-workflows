@@ -1,0 +1,60 @@
+# JAGT1806/reusables-workflows/.github/workflows/release-merge-handler.yml
+name: Handle Release Merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  process-merge:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+          token: '${{ secrets.GITHUB_TOKEN }}'
+
+      - name: Setup Maven
+        uses: JAGT1806/repo-actions/.github/actions/setup-maven@main
+
+      - name: Handle Release Merge
+        id: handle-merge
+        uses: JAGT1806/repo-actions/.github/actions/handle-release-merge@main
+        with:
+          merged_branch: ${{ github.event.pull_request.head.ref }}
+          target_branch: ${{ github.event.pull_request.base.ref }}
+
+      - name: Trigger Propagation
+        if: steps.handle-merge.outputs.propagated == 'true'
+        uses: JAGT1806/repo-actions/.github/actions/propagate-release@main
+        with:
+          source_branch: ${{ github.event.pull_request.base.ref }}
+          source_version: ${{ steps.handle-merge.outputs.new_version }}
+          target_releases: ${{ steps.get-next-releases.outputs.next_releases }}
+
+      - name: Get Next Release Branches
+        id: get-next-releases
+        if: steps.handle-merge.outputs.propagated == 'true'
+        shell: bash
+        run: |
+          CURRENT_BRANCH="${{ github.event.pull_request.base.ref }}"
+          CURRENT_VERSION="${CURRENT_BRANCH#release/}"
+
+          # Get all release branches
+          RELEASE_BRANCHES=$(git branch -r | grep -o 'release/[0-9.]*' | sort -V | uniq)
+
+          # Find subsequent releases
+          NEXT_RELEASES=()
+          FOUND_CURRENT=false
+
+          for BRANCH in $RELEASE_BRANCHES; do
+            if [ "$FOUND_CURRENT" = true ]; then
+              NEXT_RELEASES+=("$BRANCH")
+            fi
+            if [ "$BRANCH" = "$CURRENT_BRANCH" ]; then
+              FOUND_CURRENT=true
+            fi
+          done
+
+          echo "next_releases=$(printf '%s\n' "${NEXT_RELEASES[@]}" | jq -R . | jq -s .)" >> $GITHUB_OUTPUT
