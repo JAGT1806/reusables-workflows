@@ -1,0 +1,43 @@
+# JAGT1806/reusables-workflows/.github/workflows/feature-to-develop.yml
+name: "[Reusable] - Feature to develop"
+
+on:
+  workflow_call:
+    inputs:
+      jira_validate:
+        required: false
+        type: boolean
+        default: false
+      jira_host:
+        required: false
+        type: string
+        description: Jira instance URL
+      allowed_statuses:
+        required: false
+        type: string
+        default: "To Do,In Progress,In Review,Done"
+        description: Allowed Jira statuses (comma-separated)
+    secrets:
+      GITHUB_TOKE:
+        required: true
+      JIRA_USER:
+        required: false
+      JIRA_TOKEN:
+        required: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+
+      - name: Validate Jira
+        if: ${{ inputs.jira_validate }}
+        uses: JAGT1806/repo-actions/.github/actions/validate-jira@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          jira_host: ${{ inputs.jira_host }}
+          jira_token: ${{ secrets.JIRA_TOKEN }}
+          jira_user: ${{ secrets.JIRA_USER }}
