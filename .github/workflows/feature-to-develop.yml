@@ -18,8 +18,6 @@ on:
         default: "To Do,In Progress,In Review,Done"
         description: Allowed Jira statuses (comma-separated)
     secrets:
-      GITHUB_TOKE:
-        required: true
       JIRA_USER:
         required: false
       JIRA_TOKEN:

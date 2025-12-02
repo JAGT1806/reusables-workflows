@@ -32,8 +32,6 @@ on:
         type: boolean
         default: false
     secrets:
-      GITHUB_TOKEN:
-        required: true
       JIRA_TOKEN:
         required: false
     outputs:

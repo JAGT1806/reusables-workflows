@@ -26,9 +26,6 @@ on:
       propagated_branches:
         description: Branches successfully propagated to
         value: ${{ jobs.propagate.outputs.propagated_branches }}
-    secrets:
-      GITHUB_TOKEN:
-        required: true
 
 jobs:
   bump_and_tag:

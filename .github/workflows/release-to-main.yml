@@ -42,10 +42,6 @@ on:
         description: "Whether PR was merged successfully"
         value: ${{ jobs.create_pr_and_release.outputs.merged_successfully }}
 
-    secrets:
-      GITHUB_TOKEN:
-        required: true
-
 jobs:
   create_pr_and_release:
     runs-on: ubuntu-latest
