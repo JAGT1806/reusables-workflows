@@ -1,0 +1,86 @@
+# JAGT1806/reusables-workflows/.github/workflows/generate-release.yml
+name: "[Reusable] - Generate Release"
+
+on:
+  workflow_call:
+    inputs:
+      base_branch:
+        required: false
+        type: string
+        default: "develop"
+      release_version:
+        required: true
+        type: string
+      version_scheme:
+        required: false
+        type: string
+        default: "minor"
+      perfom_github_release:
+        required: false
+        type: boolean
+        default: true
+      github_release_draft:
+        required: false
+        type: boolean
+        default: false
+      github_release_prerelease:
+        required: false
+        type: boolean
+        default: false
+      jira_validate:
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      GITHUB_TOKEN:
+        required: true
+      JIRA_TOKEN:
+        required: false
+    outputs:
+      release_branch:
+        value: ${{ jobs.create_release_branch.outputs.release_branch }}
+      release_version:
+        value: ${{ jobs.create_release_branch.outputs.release_version }}
+
+jobs:
+  create_release_branch:
+    runs-on: ubuntu-latest
+    outputs:
+      release_branch: ${{ steps.create.outputs.release_branch }}
+      release_version: ${{ steps.create.outputs.release_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+
+      - name: Setup Git
+        uses: JAGT1806/repo-actions/.github/actions/setup-git@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create release branch (set version)
+        uses: JAGT1806/repo-actions/.github/actions/create-release-branch@main
+        id: create
+        with:
+          base_branch: ${{ inputs.base_branch }}
+          version: ${{ inputs.release_version }}
+          version_scheme: ${{ inputs.version_scheme }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Git tag
+        id: tag
+        uses: JAGT1806/repo-actions/.github/actions/create-tag@main
+        with:
+          tag: ${{ steps.create.outputs.release_version }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create Github Release
+        if: ${{ inputs.perfom_github_release }}
+        uses: JAGT1806/repo-actions/.github/actions/create-release-gh@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.tag.outputs.tag }}
+          title: 'Release ${{ steps.tag.outputs.tag }}'
+          draft: ${{ inputs.github_release_draft }}
+          prerelease: ${{ inputs.github_release_prerelease }}

@@ -1,0 +1,107 @@
+# JAGT1806/reusables-workflows/.github/workflows/release-to-main.yml
+name: "[Reusable] - Release to Main"
+
+on:
+  workflow_call:
+    inputs:
+      release_branch:
+        required: true
+        type: string
+        description: "Release branch to merge to main"
+      release_title:
+        required: false
+        type: string
+        description: "Release title (defaults to tag)"
+      release_notes:
+        required: false
+        type: string
+        description: "Release notes"
+      draft_release:
+        required: false
+        type: boolean
+        default: false
+        description: "Create release as draft"
+      prerelease:
+        required: false
+        type: boolean
+        default: false
+        description: "Mark release as prerelease"
+      packaging:
+        required: true
+        type: string
+        description: "maven|gradle"
+
+    outputs:
+      release_url:
+        description: "URL of created GitHub release"
+        value: ${{ jobs.create_pr_and_release.outputs.release_url }}
+      tag_name:
+        description: "Tag name used for release"
+        value: ${{ jobs.create_pr_and_release.outputs.tag_name }}
+      merged_successfully:
+        description: "Whether PR was merged successfully"
+        value: ${{ jobs.create_pr_and_release.outputs.merged_successfully }}
+
+    secrets:
+      GITHUB_TOKEN:
+        required: true
+
+jobs:
+  create_pr_and_release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_url: ${{ steps.create-release.outputs.release_url }}
+      tag_name: ${{ steps.get-version.outputs.tag }}
+      merged_successfully: ${{ steps.auto-merge.outputs.merged }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read current Maven version
+        if: ${{ inputs.packaging == 'maven' }}
+        id: read-maven
+        uses: JAGT1806/repo-actions/.github/actions/read-version-maven@main
+
+      - name: Read current Gradle version
+        if: ${{ inputs.packaging == 'gradle' }}
+        id: read-gradle
+        uses: JAGT1806/repo-actions/.github/actions/read-version-gradle@main
+
+      - name: Get version from previous step
+        id: get-version
+        run: |
+          if [ "${{ inputs.packaging }}" = "maven" ]; then
+            echo "version=${{ steps.read-maven.outputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${{ steps.read-gradle.outputs.version }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create PR to main and auto-merge
+        id: auto-merge
+        uses: JAGT1806/repo-actions/.github/actions/auto-merge-pr@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          source_branch: ${{ inputs.release_branch }}
+          target_branch: main
+          title: "Release ${{ steps.get-version.outputs.version }} to main"
+          body: |
+            Automated release PR from ${{ inputs.release_branch }} to main.
+            
+            Version: ${{ steps.get-version.outputs.version }}
+            
+            This PR was automatically created by GitHub Actions.
+
+      - name: Create GitHub Release
+        id: create-release
+        if: ${{ steps.auto-merge.outputs.merged == 'true' }}
+        uses: JAGT1806/repo-actions/.github/actions/create-release-gh@main
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ steps.get-version.outputs.version }}
+          title: ${{ inputs.release_title }}
+          notes: ${{ inputs.release_notes }}
+          draft: ${{ inputs.draft_release }}
+          prerelease: ${{ inputs.prerelease }}
