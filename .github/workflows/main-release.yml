@@ -28,3 +28,4 @@ jobs:
         with:
           tag: ${{ steps.read-version.outputs.version }}
           notes: Automated release from ${{ github.event.pull_request.head.ref }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
