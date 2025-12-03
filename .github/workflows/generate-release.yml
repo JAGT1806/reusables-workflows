@@ -42,6 +42,9 @@ on:
 
 jobs:
   create_release_branch:
+    permissions:
+      contents: write
+
     runs-on: ubuntu-latest
     outputs:
       release_branch: ${{ steps.create.outputs.release_branch }}
