@@ -9,7 +9,7 @@ on:
         type: string
         default: "develop"
       release_version:
-        required: true
+        required: false
         type: string
       version_scheme:
         required: false
