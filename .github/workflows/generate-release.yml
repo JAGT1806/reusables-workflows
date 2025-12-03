@@ -73,6 +73,12 @@ jobs:
           tag: ${{ steps.create.outputs.release_version }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Increment develop version
+        id: develop_bump
+        uses: JAGT1806/repo-actions/.github/actions/prepare-develop-snapshot@main
+        with:
+          base_version: ${{ steps.create.outputs.base_version }}
+
       - name: Create Github Release
         if: ${{ inputs.perfom_github_release }}
         uses: JAGT1806/repo-actions/.github/actions/create-release-gh@main
