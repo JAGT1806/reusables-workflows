@@ -1,0 +1,139 @@
+name: '[Reusable] CI - Build & Test'
+
+on:
+  workflow_call:
+    inputs:
+      # ── Java ──────────────────────────────────────────────
+      java_version:
+        type: string
+        required: false
+        default: '17'
+      java_distribution:
+        type: string
+        required: false
+        default: 'temurin'
+      maven_args:
+        type: string
+        required: false
+        default: ''
+      # ── Jira ──────────────────────────────────────────────
+      jira_enabled:
+        type: boolean
+        required: false
+        default: false
+      jira_base_url:
+        type: string
+        required: false
+        default: ''
+      jira_project_key:
+        type: string
+        required: false
+        default: ''
+      jira_allowed_types:
+        type: string
+        required: false
+        default: ''
+      jira_allowed_statuses:
+        type: string
+        required: false
+        default: ''
+      jira_fail_on_missing:
+        type: boolean
+        required: false
+        default: true
+      # ── Sonar ─────────────────────────────────────────────
+      sonar_enabled:
+        type: boolean
+        required: false
+        default: false
+      sonar_host_url:
+        type: string
+        required: false
+        default: ''
+      sonar_organization:
+        type: string
+        required: false
+        default: ''
+      sonar_project_key:
+        type: string
+        required: false
+        default: ''
+    secrets:
+      jira_user_email:
+        required: false
+      jira_api_token:
+        required: false
+      sonar_token:
+        required: false
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  jira-validation:
+    name: 'Jira Ticket Validation'
+    if: ${{ inputs.jira_enabled }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 50
+
+      - name: Collect commit messages
+        id: commits
+        shell: bash
+        run: |
+          # Collect last 20 commit messages as JSON array
+          MSGS=$(git log --format="%s" -n 20 | python3 -c "import sys,json; print(json.dumps([l.rstrip() for l in sys.stdin]))")
+          echo "messages=${MSGS}" >> $GITHUB_OUTPUT
+
+      - name: Validate Jira tickets
+        uses: JAGT1806/repo-actions/.github/actions/jira-validate@v0.1.0
+        with:
+          jira_base_url: ${{ inputs.jira_base_url }}
+          jira_user_email: ${{ secrets.jira_user_email }}
+          jira_api_token: ${{ secrets.jira_api_token }}
+          jira_project_key: ${{ inputs.jira_project_key }}
+          allowed_issue_types: ${{ inputs.jira_allowed_types }}
+          allowed_statuses: ${{ inputs.jira_allowed_statuses }}
+          fail_on_missing: ${{ inputs.jira_fail_on_missing }}
+          commits_json: ${{ steps.commits.outputs.messages }}
+          branch_name: ${{ github.head_ref || github.ref_name }}
+
+  # ──────────────────────────────────────────────────────────
+  build-test:
+    name: 'Build & Test'
+    runs-on: ubuntu-latest
+    needs: [ jira-validation ]
+    if: |
+      always() &&
+      (needs.jira-validation.result == 'success' || needs.jira-validation.result == 'skipped')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build and Test
+        uses: JAGT1806/repo-actions/.github/actions/maven-build@v0.1.0
+        with:
+          java_version: ${{ inputs.java_version }}
+          java_distribution: ${{ inputs.java_distribution }}
+          maven_args: ${{ inputs.maven_args }}
+          run_tests: 'true'
+
+  # ──────────────────────────────────────────────────────────
+  sonar:
+    name: 'Sonar Analysis'
+    if: ${{ inputs.sonar_enabled }}
+    runs-on: ubuntu-latest
+    needs: [ build-test ]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Analysis
+        uses: JAGT1806/repo-actions/.github/actions/sonar-analysis@v0.1.0
+        with:
+          sonar_token: ${{ secrets.sonar_token }}
+          sonar_host_url: ${{ inputs.sonar_host_url }}
+          sonar_organization: ${{ inputs.sonar_organization }}
+          sonar_project_key: ${{ inputs.sonar_project_key }}
+          java_version: ${{ inputs.java_version }}
+          java_distribution: ${{ inputs.java_distribution }}
