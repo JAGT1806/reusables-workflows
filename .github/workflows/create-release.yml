@@ -1,0 +1,127 @@
+name: '[Reusable] Create Release Branch'
+
+# Triggered when develop is ready to cut a release.
+# Flow:
+#   develop (0.1.0-SNAPSHOT) ──► release/0.1 (0.1.0, tag v0.1.0) ──► develop (0.2.0-SNAPSHOT)
+
+on:
+  workflow_call:
+    inputs:
+      java_version:
+        type: string
+        required: false
+        default: '17'
+      java_distribution:
+        type: string
+        required: false
+        default: 'temurin'
+      bump_type:
+        description: 'Which part to bump for the NEXT develop snapshot: minor or major'
+        type: string
+        required: false
+        default: 'minor'
+    secrets:
+      github_token:
+        required: true
+
+jobs:
+  create-release:
+    name: 'Cut Release from develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.github_token }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java_version }}
+          distribution: ${{ inputs.java_distribution }}
+          cache: maven
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # ── 1. Read version from develop ──────────────────────
+      - name: Get current version
+        id: version
+        uses: JAGT1806/repo-actions/.github/actions/get-version@v0.1.0
+
+      - name: Validate that develop is SNAPSHOT
+        run: |
+          if [[ "${{ steps.version.outputs.is_snapshot }}" != "true" ]]; then
+            echo "❌ develop must be a SNAPSHOT version. Found: ${{ steps.version.outputs.version }}"
+            exit 1
+          fi
+
+      # ── 2. Compute release branch name and release version ─
+      - name: Compute release info
+        id: release_info
+        run: |
+          BASE="${{ steps.version.outputs.base_version }}"
+          MAJOR="${{ steps.version.outputs.major }}"
+          MINOR="${{ steps.version.outputs.minor }}"
+          # release branch name: release/MAJOR.MINOR
+          RELEASE_BRANCH="release/${MAJOR}.${MINOR}"
+          RELEASE_VERSION="${BASE}"  # e.g. 0.1.0
+          TAG="v${RELEASE_VERSION}"
+          echo "release_branch=${RELEASE_BRANCH}" >> $GITHUB_OUTPUT
+          echo "release_version=${RELEASE_VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+      # ── 3. Create release branch and set non-SNAPSHOT version ─
+      - name: Create release branch
+        run: |
+          git checkout -b "${{ steps.release_info.outputs.release_branch }}"
+
+      - name: Set release version
+        uses: JAGT1806/repo-actions/.github/actions/set-version@v0.1.0
+        with:
+          version: ${{ steps.release_info.outputs.release_version }}
+          commit_message: 'chore: release ${{ steps.release_info.outputs.release_version }} [skip ci]'
+
+      - name: Push release branch
+        run: git push origin "${{ steps.release_info.outputs.release_branch }}"
+
+      # ── 4. Tag the release ────────────────────────────────
+      - name: Create tag
+        run: |
+          git tag "${{ steps.release_info.outputs.tag }}"
+          git push origin "${{ steps.release_info.outputs.tag }}"
+
+      # ── 5. Bump develop to next SNAPSHOT ─────────────────
+      - name: Switch back to develop
+        run: |
+          git checkout develop
+          git pull origin develop
+
+      - name: Bump develop version
+        id: next_dev
+        uses: JAGT1806/repo-actions/.github/actions/bump-version@v0.1.0
+        with:
+          current_version: ${{ steps.version.outputs.base_version }}
+          bump_type: ${{ inputs.bump_type }}
+          snapshot: 'true'
+
+      - name: Set next SNAPSHOT on develop
+        uses: JAGT1806/repo-actions/.github/actions/set-version@v0.1.0
+        with:
+          version: ${{ steps.next_dev.outputs.next_version }}
+          commit_message: 'chore: bump develop to ${{ steps.next_dev.outputs.next_version }} [skip ci]'
+
+      - name: Push develop
+        run: git push origin develop
+
+      - name: Summary
+        run: |
+          echo "## ✅ Release Created" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Release branch | \`${{ steps.release_info.outputs.release_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release version | \`${{ steps.release_info.outputs.release_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Tag | \`${{ steps.release_info.outputs.tag }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Next develop | \`${{ steps.next_dev.outputs.next_version }}\` |" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,99 @@
+name: '[Reusable] Release to Production'
+
+# Merges a release branch into main and triggers production deploy.
+# Release branch must have version without SNAPSHOT.
+
+on:
+  workflow_call:
+    inputs:
+      release_branch:
+        description: 'Release branch to merge to main (e.g. release/0.1)'
+        type: string
+        required: true
+      java_version:
+        type: string
+        required: false
+        default: '17'
+      java_distribution:
+        type: string
+        required: false
+        default: 'temurin'
+      # Deploy hook — callers can override with their own deploy logic
+      deploy_command:
+        description: 'Command to run for deployment. Leave empty to skip.'
+        type: string
+        required: false
+        default: ''
+    secrets:
+      github_token:
+        required: true
+
+jobs:
+  release-to-prod:
+    name: 'Merge ${{ inputs.release_branch }} → main & Deploy'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.github_token }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java_version }}
+          distribution: ${{ inputs.java_distribution }}
+          cache: maven
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Build & Test release branch
+        uses: JAGT1806/repo-actions/.github/actions/maven-build@v0.1.0
+        with:
+          java_version: ${{ inputs.java_version }}
+          java_distribution: ${{ inputs.java_distribution }}
+          run_tests: 'true'
+
+      - name: Get release version
+        id: version
+        uses: JAGT1806/repo-actions/.github/actions/get-version@v0.1.0
+
+      - name: Validate non-SNAPSHOT
+        run: |
+          if [[ "${{ steps.version.outputs.is_snapshot }}" == "true" ]]; then
+            echo "❌ Release branch must NOT be a SNAPSHOT. Found: ${{ steps.version.outputs.version }}"
+            exit 1
+          fi
+
+      - name: Merge release → main
+        run: |
+          git checkout main
+          git pull origin main
+          git merge "origin/${{ inputs.release_branch }}" --no-ff \
+            -m "chore: merge ${{ inputs.release_branch }} into main (v${{ steps.version.outputs.version }}) [skip ci]"
+          git push origin main
+
+      - name: Sync main version tag
+        run: |
+          TAG="v${{ steps.version.outputs.version }}"
+          # Tag may already exist from release creation; only create if missing
+          if ! git tag -l "$TAG" | grep -q "$TAG"; then
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi
+
+      - name: Deploy to production
+        if: ${{ inputs.deploy_command != '' }}
+        run: ${{ inputs.deploy_command }}
+
+      - name: Summary
+        run: |
+          echo "## 🚀 Production Release" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Source | \`${{ inputs.release_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Target | \`main\` |" >> $GITHUB_STEP_SUMMARY

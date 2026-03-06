@@ -1,0 +1,67 @@
+name: '[Reusable] Bugfix Integration'
+
+# When a bugfix branch needs to merge into a release:
+# 1. Creates an intermediate merge branch with patch version bump
+# 2. Opens PR from intermediate → release (no analysis pipelines on intermediate)
+# 3. When that PR is merged to release, the release pipeline runs normally
+# 4. Propagation from release → later releases → develop follows automatically
+
+on:
+  workflow_call:
+    inputs:
+      bugfix_branch:
+        description: 'Bugfix source branch (e.g. bugfix/fix-login)'
+        type: string
+        required: true
+      target_release:
+        description: 'Target release branch (e.g. release/0.1)'
+        type: string
+        required: true
+      java_version:
+        type: string
+        required: false
+        default: '17'
+      java_distribution:
+        type: string
+        required: false
+        default: 'temurin'
+    secrets:
+      github_token:
+        required: true
+
+jobs:
+  create-intermediate:
+    name: 'Create intermediate branch for bugfix → release'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.github_token }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java_version }}
+          distribution: ${{ inputs.java_distribution }}
+          cache: maven
+
+      - name: Create intermediate branch & bump patch
+        id: intermediate
+        uses: JAGT1806/repo-actions/.github/actions/create-intermediate-branch@v0.1.0
+        with:
+          bugfix_branch: ${{ inputs.bugfix_branch }}
+          target_release: ${{ inputs.target_release }}
+          github_token: ${{ secrets.github_token }}
+
+      - name: Summary
+        run: |
+          echo "## 🔀 Bugfix Intermediate Branch Created" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Intermediate | \`${{ steps.intermediate.outputs.intermediate_branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Target release | \`${{ inputs.target_release }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| New patch version | \`${{ steps.intermediate.outputs.new_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> ⚠️ No CI/Sonar/Jira analysis runs on the intermediate branch." >> $GITHUB_STEP_SUMMARY
+          echo "> Full pipeline runs when the PR is merged into \`${{ inputs.target_release }}\`." >> $GITHUB_STEP_SUMMARY

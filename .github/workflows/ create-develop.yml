@@ -1,0 +1,87 @@
+name: '[Reusable] Create Develop Branch'
+
+# Creates the develop branch from main and sets it to 0.1.0-SNAPSHOT.
+# Intended to run once after the scaffold workflow completes on main.
+
+on:
+  workflow_call:
+    inputs:
+      java_version:
+        type: string
+        required: false
+        default: '17'
+      java_distribution:
+        type: string
+        required: false
+        default: 'temurin'
+      initial_snapshot_version:
+        description: 'Initial SNAPSHOT version for develop (default: 0.1.0-SNAPSHOT)'
+        type: string
+        required: false
+        default: '0.1.0-SNAPSHOT'
+    secrets:
+      github_token:
+        required: true
+
+jobs:
+  create-develop:
+    name: 'Create develop branch (SNAPSHOT)'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.github_token }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          java-version: ${{ inputs.java_version }}
+          distribution: ${{ inputs.java_distribution }}
+          cache: maven
+
+      - name: Check if develop already exists
+        id: check
+        run: |
+          git fetch --all
+          if git show-ref --quiet refs/remotes/origin/develop; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️ develop branch already exists — skipping creation."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create develop branch from main
+        if: steps.check.outputs.exists == 'false'
+        run: |
+          git checkout -b develop
+
+      - name: Set SNAPSHOT version on develop
+        if: steps.check.outputs.exists == 'false'
+        uses: JAGT1806/repo-actions/.github/actions/set-version@v0.1.0
+        with:
+          version: ${{ inputs.initial_snapshot_version }}
+          commit_message: 'chore: initialize develop as ${{ inputs.initial_snapshot_version }} [skip ci]'
+
+      - name: Push develop
+        if: steps.check.outputs.exists == 'false'
+        run: git push origin develop
+
+      - name: Summary
+        run: |
+          if [[ "${{ steps.check.outputs.exists }}" == "true" ]]; then
+            echo "## ℹ️ develop branch already existed — no changes made." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## ✅ develop Branch Created" >> $GITHUB_STEP_SUMMARY
+            echo "| | |" >> $GITHUB_STEP_SUMMARY
+            echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+            echo "| Branch | \`develop\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| Version | \`${{ inputs.initial_snapshot_version }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "| Created from | \`main\` (v0.0.0) |" >> $GITHUB_STEP_SUMMARY
+          fi
