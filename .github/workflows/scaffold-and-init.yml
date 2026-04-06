@@ -130,7 +130,7 @@ jobs:
 
       # ── 2. Install the scaffold plugin from source ───────
       - name: Install scaffold plugin
-        uses: JAGT1806/repo-actions/.github/actions/install-maven-plugin@v0.2.0
+        uses: JAGT1806/repo-actions/.github/actions/install-maven-plugin@main
         with:
           plugin_repo: ${{ inputs.plugin_repo }}
           plugin_version: v${{ inputs.plugin_version }}
