@@ -1,0 +1,227 @@
+name: '[Reusable] Scaffold & Initialize Repository'
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Triggered manually from main/master when a fresh project needs to be
+# bootstrapped using the internal Maven scaffold plugin.
+#
+# What this workflow does:
+#   1. Clones the scaffold Maven plugin repo, checks out the requested tag,
+#      and installs it locally (mvn clean install -DskipTests).
+#   2. Runs the plugin's "init" goal to generate the full project structure
+#      in the root of the repository.
+#   3. Commits and pushes the generated files to main/master with version 0.0.0.
+#   4. Creates the develop branch from main and bumps it to
+#      0.1.0-SNAPSHOT (minor bump + SNAPSHOT).
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_call:
+    inputs:
+      # ── Plugin source ────────────────────────────────────
+      plugin_repo:
+        description: 'Git URL of the scaffold Maven plugin repository'
+        type: string
+        default: 'https://github.com/JAGT1806/maven-jagt1806-scaffold'
+      plugin_version:
+        description: 'Tag of the plugin to install (e.g. 0.1.0)'
+        type: string
+        required: true
+      plugin_group_id:
+        description: 'GroupId of the scaffold plugin (e.g. com.mycompany)'
+        type: string
+        default: 'dev.jagt1806.plugin.scaffold'
+      plugin_artifact_id:
+        description: 'ArtifactId of the scaffold plugin (e.g. scaffold-maven-plugin)'
+        type: string
+        default: 'maven-jagt1806-scaffold'
+
+      # ── Project identity ─────────────────────────────────
+      group_id:
+        description: 'GroupId for the new project'
+        type: string
+        required: true
+      artifact_id:
+        description: 'ArtifactId / folder name for the new project'
+        type: string
+        required: true
+      name:
+        description: 'Human-readable project name (defaults to artifactId)'
+        type: string
+        required: false
+        default: ''
+      package_name:
+        description: 'Base Java package (defaults to groupId.artifactId)'
+        type: string
+        required: false
+        default: ''
+
+      # ── Technology choices ───────────────────────────────
+      java_version:
+        type: string
+        required: false
+        default: '17'
+      java_distribution:
+        type: string
+        required: false
+        default: 'temurin'
+      spring_version:
+        type: string
+        required: false
+        default: '4.0.0'
+      configuration:
+        description: 'YAML or PROPERTIES'
+        type: string
+        required: false
+        default: 'YAML'
+      architecture:
+        description: 'HEXAGONAL_MODULAR | HEXAGONAL_STANDARD | MVC'
+        type: string
+        required: false
+        default: 'HEXAGONAL_MODULAR'
+      mapstruct:
+        description: 'Include MapStruct (true/false)'
+        type: string
+        required: false
+        default: 'false'
+      lombok:
+        description: 'Include Lombok (true/false)'
+        type: string
+        required: false
+        default: 'false'
+
+      # ── Develop bootstrap ────────────────────────────────
+      develop_snapshot_version:
+        description: 'Initial SNAPSHOT version for develop (default: 0.1.0-SNAPSHOT)'
+        type: string
+        required: false
+        default: '0.1.0-SNAPSHOT'
+
+      # ── Git config ───────────────────────────────────────
+      git_user_name:
+        type: string
+        required: false
+        default: 'github-actions[bot]'
+      git_user_email:
+        type: string
+        required: false
+        default: 'github-actions[bot]@users.noreply.github.com'
+
+    secrets:
+      github_token:
+        required: true
+
+jobs:
+  scaffold-and-init:
+    name: 'Scaffold project and create develop'
+    runs-on: ubuntu-latest
+    steps:
+      # ── 1. Checkout main ─────────────────────────────────
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+          token: ${{ secrets.github_token }}
+
+      - name: Configure git
+        run: |
+          git config user.name "${{ inputs.git_user_name }}"
+          git config user.email "${{ inputs.git_user_email }}"
+
+      # ── 2. Install the scaffold plugin from source ───────
+      - name: Install scaffold plugin
+        uses: JAGT1806/repo-actions/.github/actions/install-maven-plugin@v0.2.0
+        with:
+          plugin_repo: ${{ inputs.plugin_repo }}
+          plugin_version: v${{ inputs.plugin_version }}
+          java_version: ${{ inputs.java_version }}
+          java_distribution: ${{ inputs.java_distribution }}
+
+      # ── 3. Generate project skeleton ────────────────────
+      - name: Scaffold project
+        id: scaffold
+        uses: JAGT1806/repo-actions/.github/actions/scaffold-project@v0.2.0
+        with:
+          group_id: ${{ inputs.group_id }}
+          artifact_id: ${{ inputs.artifact_id }}
+          name: ${{ inputs.name }}
+          package_name: ${{ inputs.package_name }}
+          version: '0.0.0'
+          java_version: ${{ inputs.java_version }}
+          spring_version: ${{ inputs.spring_version }}
+          configuration: ${{ inputs.configuration }}
+          architecture: ${{ inputs.architecture }}
+          mapstruct: ${{ inputs.mapstruct }}
+          lombok: ${{ inputs.lombok }}
+          plugin_group_id: ${{ inputs.plugin_group_id }}
+          plugin_artifact_id: ${{ inputs.plugin_artifact_id }}
+          plugin_version: ${{ inputs.plugin_version }}
+          output_directory: '.'
+
+      # ── 4. Move generated files to repo root and commit ──
+      - name: Move scaffold output to repo root and commit
+        run: |
+          PROJECT_DIR="${{ steps.scaffold.outputs.project_dir }}"
+          echo "📁 Generated at: ${PROJECT_DIR}"
+
+          # Copy everything from the generated folder into the repo root
+          # (the plugin creates a sub-folder named after artifactId)
+          shopt -s dotglob
+          cp -r "${PROJECT_DIR}/." .
+          rm -rf "${PROJECT_DIR}"
+
+          git add -A
+          git diff --staged --quiet && echo "Nothing to commit" && exit 0
+          git commit -m "chore: scaffold project ${{ inputs.artifact_id }} v0.0.0 [skip ci]"
+          git push origin "${{ github.ref_name }}"
+          echo "✅ Scaffold committed to ${{ github.ref_name }}"
+
+      # ── 5. Create develop branch ─────────────────────────
+      - name: Check if develop already exists
+        id: check_develop
+        run: |
+          git fetch --all
+          if git show-ref --quiet refs/remotes/origin/develop; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️  develop already exists — skipping creation."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create develop from main and set SNAPSHOT version
+        if: steps.check_develop.outputs.exists == 'false'
+        run: |
+          git checkout -b develop
+
+      - name: Set SNAPSHOT version on develop
+        if: steps.check_develop.outputs.exists == 'false'
+        uses: JAGT1806/repo-actions/.github/actions/set-version@v0.1.0
+        with:
+          version: ${{ inputs.develop_snapshot_version }}
+          commit_message: 'chore: initialize develop as ${{ inputs.develop_snapshot_version }} [skip ci]'
+          git_user_name: ${{ inputs.git_user_name }}
+          git_user_email: ${{ inputs.git_user_email }}
+
+      - name: Push develop
+        if: steps.check_develop.outputs.exists == 'false'
+        run: git push origin develop
+
+      # ── 6. Summary ────────────────────────────────────────
+      - name: Summary
+        run: |
+          echo "## ✅ Scaffold & Init Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Project | \`${{ inputs.artifact_id }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Architecture | \`${{ inputs.architecture }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Plugin version | \`${{ inputs.plugin_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Main version | \`0.0.0\` |" >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ steps.check_develop.outputs.exists }}" == "false" ]]; then
+            echo "| Develop version | \`${{ inputs.develop_snapshot_version }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> develop branch created from main." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> ⚠️ develop branch already existed — not modified." >> $GITHUB_STEP_SUMMARY
+          fi
