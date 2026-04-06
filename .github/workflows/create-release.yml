@@ -21,7 +21,7 @@ on:
         required: false
         default: 'minor'
     secrets:
-      github_token:
+      gh_token:
         required: true
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.github_token }}
+          token: ${{ secrets.gh_token }}
 
       - name: Set up JDK
         uses: actions/setup-java@v4
