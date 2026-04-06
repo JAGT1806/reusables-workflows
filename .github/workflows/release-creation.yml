@@ -1,0 +1,63 @@
+# JAGT1806/reusables-workflows/.github/workflows/release-creation.yml
+name: Create Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version (without -SNAPSHOT) - leave empty for auto-detection
+        required: false
+        type: string
+      version_scheme:
+        description: Version bump scheme if version not provided
+        required: false
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+        default: minor
+      base_branch:
+        description: Base branch for release
+        required: false
+        type: string
+        default: develop
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: '0'
+          token: '${{ secrets.GITHUB_TOKEN }}'
+
+      - name: Setup Maven
+        uses: JAGT1806/repo-actions/.github/actions/setup-maven@main
+
+      - name: Create Release Branch
+        id: create-release
+        uses: JAGT1806/repo-actions/.github/actions/create-release-branch@main
+        with:
+          version: ${{ inputs.version }}
+          version_scheme: ${{ inputs.version_scheme }}
+          base_branch: ${{ inputs.base_branch }}
+
+      - name: Prepare Develop for Next Version
+        id: next-develop
+        uses: JAGT1806/repo-actions/.github/actions/prepare-develop-snapshot@main
+        with:
+          base_version: ${{ steps.create-release.outputs.release_version }}
+
+      - name: Create Git Tag
+        uses: JAGT1806/repo-actions/.github/actions/create-tag@main
+        with:
+          tag: ${{ steps.create-release.outputs.release_version }}
+
+      - name: Output Release Info
+        run: |
+          echo "🎉 Release created successfully!"
+          echo "- Release Branch: ${{ steps.create-release.outputs.release_brach }}"
+          echo "  - Release version: ${{ steps.create-release.outputs.release_version }}"
+          echo "🏷️ Git Tag: v${{ steps.create-release.outputs.release_version }}"
+          echo "- Develop updated version: ${{ steps.next-develop.outputs.develop_snapshot }}"
