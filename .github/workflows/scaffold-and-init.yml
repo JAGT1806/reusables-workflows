@@ -107,7 +107,7 @@ on:
         default: 'github-actions[bot]@users.noreply.github.com'
 
     secrets:
-      github_token:
+      gh_token:
         required: true
 
 jobs:
@@ -121,7 +121,7 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
           fetch-depth: 0
-          token: ${{ secrets.github_token }}
+          token: ${{ secrets.gh_token }}
 
       - name: Configure git
         run: |

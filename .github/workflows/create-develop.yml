@@ -20,7 +20,7 @@ on:
         required: false
         default: '0.1.0-SNAPSHOT'
     secrets:
-      github_token:
+      gh_token:
         required: true
 
 jobs:
@@ -32,7 +32,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-          token: ${{ secrets.github_token }}
+          token: ${{ secrets.gh_token }}
 
       - name: Configure git
         run: |
