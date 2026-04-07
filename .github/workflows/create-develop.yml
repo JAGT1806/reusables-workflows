@@ -64,7 +64,7 @@ jobs:
 
       - name: Set SNAPSHOT version on develop
         if: steps.check.outputs.exists == 'false'
-        uses: JAGT1806/repo-actions/.github/actions/set-version@v0.1.0
+        uses: JAGT1806/repo-actions/.github/actions/set-version@main
         with:
           version: ${{ inputs.initial_snapshot_version }}
           commit_message: 'chore: initialize develop as ${{ inputs.initial_snapshot_version }} [skip ci]'
