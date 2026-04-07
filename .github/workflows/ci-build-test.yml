@@ -110,7 +110,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build and Test
-        uses: JAGT1806/repo-actions/.github/actions/maven-build@v0.1.0
+        uses: JAGT1806/repo-actions/.github/actions/maven-build@main
         with:
           java_version: ${{ inputs.java_version }}
           java_distribution: ${{ inputs.java_distribution }}
