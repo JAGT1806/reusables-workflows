@@ -79,7 +79,7 @@ jobs:
           git checkout -b "${{ steps.release_info.outputs.release_branch }}"
 
       - name: Set release version
-        uses: JAGT1806/repo-actions/.github/actions/set-version@v0.1.0
+        uses: JAGT1806/repo-actions/.github/actions/set-version@main
         with:
           version: ${{ steps.release_info.outputs.release_version }}
           commit_message: 'chore: release ${{ steps.release_info.outputs.release_version }} [skip ci]'
@@ -108,7 +108,7 @@ jobs:
           snapshot: 'true'
 
       - name: Set next SNAPSHOT on develop
-        uses: JAGT1806/repo-actions/.github/actions/set-version@v0.1.0
+        uses: JAGT1806/repo-actions/.github/actions/set-version@main
         with:
           version: ${{ steps.next_dev.outputs.next_version }}
           commit_message: 'chore: bump develop to ${{ steps.next_dev.outputs.next_version }} [skip ci]'
